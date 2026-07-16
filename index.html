@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1838">
+<title>Boo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    height:100%; overflow:hidden; overscroll-behavior:none;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    font-family:-apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    background:linear-gradient(180deg, var(--bg1,#141433) 0%, var(--bg2,#2a2450) 100%);
+    transition:background 3s ease;
+    position:fixed; inset:0; width:100%;
+  }
+  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position:absolute; top:calc(env(safe-area-inset-top, 0px) + 14px);
+    left:0; right:0; text-align:center; color:rgba(255,255,255,.92);
+    pointer-events:none; text-shadow:0 1px 8px rgba(0,0,0,.35);
+  }
+  #hudName { font-size:20px; font-weight:700; letter-spacing:.4px; }
+  #hudStage { font-size:12px; opacity:.75; margin-top:2px; }
+  #bondWrap {
+    width:120px; height:6px; margin:7px auto 0; border-radius:3px;
+    background:rgba(255,255,255,.18); overflow:hidden;
+  }
+  #bondBar {
+    height:100%; width:0%; border-radius:3px;
+    background:linear-gradient(90deg, #ffd1e8, #ffaad4);
+    transition:width .8s ease;
+  }
+
+  /* ---------- speech bubble ---------- */
+  #bubble {
+    position:absolute; left:50%; transform:translate(-50%, 8px) scale(.85);
+    max-width:min(78vw, 320px); padding:10px 16px; border-radius:18px;
+    background:rgba(255,255,255,.95); color:#3a3355;
+    font-size:15px; line-height:1.35; text-align:center;
+    box-shadow:0 4px 20px rgba(0,0,0,.25);
+    opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.34,1.56,.64,1);
+    pointer-events:none;
+  }
+  #bubble.show { opacity:1; transform:translate(-50%, 0) scale(1); }
+  #bubble::after {
+    content:""; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%);
+    border:8px solid transparent; border-top:9px solid rgba(255,255,255,.95); border-bottom:0;
+  }
+
+  /* ---------- buttons ---------- */
+  #btns {
+    position:absolute; left:0; right:0;
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);
+    display:flex; justify-content:center; gap:12px; padding:0 14px;
+  }
+  .btn {
+    border:none; outline:none; cursor:pointer;
+    padding:12px 18px; border-radius:24px; font-size:15px; font-weight:600;
+    color:rgba(255,255,255,.95);
+    background:rgba(255,255,255,.14);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 4px 14px rgba(0,0,0,.18);
+    transition:transform .12s ease, background .2s ease;
+    touch-action:none; font-family:inherit;
+  }
+  .btn:active { transform:scale(.93); background:rgba(255,255,255,.26); }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(12,10,32,.55); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    opacity:0; pointer-events:none; transition:opacity .35s ease; z-index:10; padding:20px;
+  }
+  .overlay.show { opacity:1; pointer-events:auto; }
+  .card {
+    width:100%; max-width:340px; padding:26px 22px; border-radius:26px;
+    background:linear-gradient(165deg, rgba(58,50,96,.96), rgba(38,32,68,.96));
+    box-shadow:0 10px 44px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.1);
+    color:rgba(255,255,255,.94); text-align:center;
+    transform:translateY(14px) scale(.96); transition:transform .35s cubic-bezier(.34,1.4,.64,1);
+  }
+  .overlay.show .card { transform:translateY(0) scale(1); }
+  .card h2 { font-size:19px; font-weight:700; margin-bottom:6px; }
+  .card p  { font-size:13.5px; line-height:1.45; opacity:.82; }
+  .cardGhost { font-size:52px; line-height:1.1; margin-bottom:8px;
+    filter:drop-shadow(0 0 14px var(--gGlow,#c9a6ff)); animation:cgBob 2.6s ease-in-out infinite; }
+  @keyframes cgBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  .field {
+    width:100%; margin-top:14px; padding:12px 14px; border-radius:14px;
+    border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.1);
+    color:#fff; font-size:16px; text-align:center; outline:none; font-family:inherit;
+  }
+  .field:focus { border-color:rgba(255,255,255,.5); }
+  .swatches { display:flex; justify-content:center; gap:10px; margin-top:14px; }
+  .sw { width:32px; height:32px; border-radius:50%; cursor:pointer;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); transition:transform .15s ease; }
+  .sw.sel { transform:scale(1.22); box-shadow:inset 0 0 0 2px #fff, 0 0 12px rgba(255,255,255,.5); }
+  .chips { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:14px; }
+  .chip { padding:7px 13px; border-radius:16px; font-size:13px; cursor:pointer;
+    background:rgba(255,255,255,.1); box-shadow:inset 0 0 0 1px rgba(255,255,255,.16); }
+  .chip.sel { background:rgba(255,255,255,.28); box-shadow:inset 0 0 0 1.5px #fff; }
+  .primary {
+    margin-top:18px; width:100%; padding:14px; border:none; border-radius:18px;
+    font-size:16px; font-weight:700; color:#3a2b55; cursor:pointer; font-family:inherit;
+    background:linear-gradient(135deg, #ffe3f1, #d9c6ff);
+    box-shadow:0 4px 18px rgba(217,198,255,.35); transition:transform .12s ease;
+  }
+  .primary:active { transform:scale(.95); }
+  .ghostBtn {
+    margin-top:10px; width:100%; padding:11px; border:none; border-radius:16px;
+    font-size:14px; color:rgba(255,255,255,.75); cursor:pointer; font-family:inherit;
+    background:transparent; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);
+  }
+  #giftLink {
+    margin-top:14px; font-size:11px; word-break:break-all; text-align:left;
+    padding:10px 12px; border-radius:12px; background:rgba(0,0,0,.28);
+    color:rgba(255,255,255,.7); max-height:64px; overflow:hidden;
+  }
+  .row2 { display:flex; gap:10px; margin-top:12px; }
+  .row2 > * { flex:1; margin-top:0; }
+  #giftPrev { margin-top:14px; display:flex; align-items:center; justify-content:center; gap:12px; }
+  #giftPrevSw { width:40px; height:40px; border-radius:50%;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.35), 0 0 16px var(--pGlow,#fff); }
+  #giftPrevTxt { text-align:left; }
+  #giftPrevName { font-size:17px; font-weight:700; }
+  #giftPrevPers { font-size:12px; opacity:.7; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div id="hudName"></div>
+  <div id="hudStage"></div>
+  <div id="bondWrap"><div id="bondBar"></div></div>
+</div>
+
+<div id="bubble"></div>
+
+<div id="btns">
+  <button class="btn" id="btnPlay">🙈 Play</button>
+  <button class="btn" id="btnTalk">💬 Talk</button>
+  <button class="btn" id="btnGift">👻 Send a ghost</button>
+</div>
+
+<!-- first-run naming -->
+<div class="overlay" id="ovName">
+  <div class="card">
+    <div class="cardGhost">👻</div>
+    <h2>A little ghost drifts in…</h2>
+    <p>It blinks at you with big hopeful eyes. It seems to want to stay. What will you call it?</p>
+    <input class="field" id="nameInput" maxlength="16" autocomplete="off" spellcheck="false">
+    <div class="swatches" id="swatches"></div>
+    <div class="chips" id="persChips"></div>
+    <button class="primary" id="btnAdopt">Adopt 💕</button>
+  </div>
+</div>
+
+<!-- send-a-ghost sheet -->
+<div class="overlay" id="ovGift">
+  <div class="card">
+    <div class="cardGhost">👻💌</div>
+    <h2>Send a ghost to a friend</h2>
+    <p>A brand-new little ghost, wrapped up in a link. When your friend opens it, the ghost is theirs to keep.</p>
+    <div id="giftPrev">
+      <div id="giftPrevSw"></div>
+      <div id="giftPrevTxt">
+        <div id="giftPrevName"></div>
+        <div id="giftPrevPers"></div>
+      </div>
+    </div>
+    <button class="ghostBtn" id="btnReroll">🎲 A different ghost</button>
+    <div id="giftLink"></div>
+    <div class="row2">
+      <button class="primary" id="btnCopy">Copy link</button>
+      <button class="primary" id="btnShare" style="display:none">Share</button>
+    </div>
+    <button class="ghostBtn" id="btnGiftClose">Close</button>
+  </div>
+</div>
+
+<!-- incoming gift adoption -->
+<div class="overlay" id="ovAdopt">
+  <div class="card">
+    <div class="cardGhost" id="adoptEmoji">👻✨</div>
+    <h2>Someone sent you a ghost!</h2>
+    <p id="adoptText"></p>
+    <button class="primary" id="btnAdoptGift"></button>
+    <button class="ghostBtn" id="btnDeclineGift"></button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   Boo — a pocket ghost companion.  Part of critters-shoebox.
+   Single file, no libraries, no network. Be kind to your ghost.
+   ============================================================ */
+
+/* ---------- pure gift-link codec (Node-testable, defined before any DOM use) ----------
+   A gift is {name, hue, personality}. It travels in the URL *fragment* as
+   #g=<base64url(JSON)>. base64url is OBFUSCATION ONLY (keeps the link tidy
+   and un-tempting to hand-edit) — it is NOT encryption and holds no secrets. */
+
+var PERSONALITIES = ['sweet', 'spooky', 'silly', 'sleepy'];
+var GIFT_HUES = [340, 265, 210, 160, 45, 20];
+
+function b64urlEncode(str) {
+  var bytes = new TextEncoder().encode(str);
+  var bin = '';
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(str) {
+  var s = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  var bin = atob(s);
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/* booEncodeGift({name, hue, personality}) -> token string */
+function booEncodeGift(gift) {
+  return b64urlEncode(JSON.stringify({
+    n: String(gift.name).slice(0, 24),
+    h: Math.round(Number(gift.hue)) % 360,
+    p: String(gift.personality)
+  }));
+}
+
+/* booDecodeGift(token) -> {name, hue, personality} or null. NEVER throws:
+   junk, empty, truncated, or wrong-shaped tokens all return null. */
+function booDecodeGift(token) {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    var obj = JSON.parse(b64urlDecode(token));
+    if (!obj || typeof obj !== 'object') return null;
+    var name = typeof obj.n === 'string' ? obj.n.trim().slice(0, 24) : '';
+    var hue = Number(obj.h);
+    var pers = obj.p;
+    if (!name) return null;
+    if (!isFinite(hue) || hue < 0 || hue >= 360) return null;
+    if (PERSONALITIES.indexOf(pers) < 0) return null;
+    return { name: name, hue: Math.round(hue), personality: pers };
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ---------- everything below only runs in a browser ---------- */
+if (typeof window !== 'undefined' && typeof document !== 'undefined') boot();
+
+function boot() {
+
+/* =============== constants & flavor =============== */
+var LS_KEY = 'boo.state.v1';
+var GHOST_NAMES = ['Boo','Wisp','Mochi','Pumpkin','Nimbus','Pippin','Echo','Clove',
+                   'Marsh','Tofu','Dusty','Twinkle','Miso','Poppy','Fig','Clementine'];
+
+var TALK_LINES = {
+  sweet: [
+    "I saved you a moonbeam. It's behind your ear.",
+    "You smell like starlight. I checked twice.",
+    "If you ever feel alone, I'm always right here. Always always.",
+    "I counted your heartbeats while you slept. All of them were good ones.",
+    "Today I practiced hugging. The air says I'm getting better.",
+    "You're my favorite haunt in the whole wide world."
+  ],
+  spooky: [
+    "I practiced my BOO today. Wanna hear? ...boo. 👻 (I'll get louder.)",
+    "The dust bunnies fear me. (They're also my friends.)",
+    "Last night I haunted your sock drawer. Nothing happened. It was great.",
+    "I know what lurks in the dark. It's mostly me. Hi.",
+    "Something spooky is near... it is I! Were you scared? Even a little?",
+    "I walked through a wall today. The wall was very polite about it."
+  ],
+  silly: [
+    "I tried to eat a cloud once. It was chewy and also not there.",
+    "Do I have knees? Genuinely asking. I've never checked.",
+    "I told a joke to the ceiling fan. It just went right over its head.",
+    "Watch this! *does absolutely nothing* ...I'm invisible. Classic.",
+    "If ghosts wore pants, would I be pants-shaped? Think about it.",
+    "I raced a soap bubble today. We tied. Forever."
+  ],
+  sleepy: [
+    "Five more minutes... okay maybe six... you count, I'll nap.",
+    "I dreamed I was a blanket. It was the best dream.",
+    "*yawns in ghost* ...sorry, haunting is exhausting.",
+    "Is it nap o'clock? It feels like nap o'clock. It's always nap o'clock.",
+    "You be the pillow, I'll be the mist. Deal?",
+    "zzz... huh! I'm awake! I was just... resting my everything."
+  ]
+};
+
+var PET_LINES = ["hehe~", "ooh!", "more please", "that's the spot", "💕", "eee!", "*happy wiggle*"];
+
+/* check-on-open greeting tiers (elapsed = ms since last visit):
+     < 10 min          -> quiet happy idle, small hello
+     10 min – 3 h      -> "you're back!" happy
+     3 h – 24 h        -> excited welcome
+     1 – 3 days        -> sleepy "I missed you", wakes as you interact
+     > 3 days          -> very sleepy + faded, overjoyed to see you (NEVER guilt) */
+var MIN = 60000, HOUR = 3600000, DAY = 86400000;
+
+function greetingFor(elapsed, name) {
+  if (elapsed < 10 * MIN) return { line: pick(["hi again! 👋", "hehe, hi!", "you're still here! yay."]), wake: 1, mood: 'happy' };
+  if (elapsed < 3 * HOUR) return { line: "You're back! I kept your spot warm. ✨", wake: 0.9, mood: 'happy' };
+  if (elapsed < DAY) return { line: "You came back!! I was counting dust motes. I lost count. Doesn't matter — you're here! (" + ago(elapsed) + ")", wake: 0.75, mood: 'excited' };
+  if (elapsed < 3 * DAY) return { line: "*stirs* ...you're here! I missed you. I saved up a whole " + ago(elapsed) + " of hellos. 💜", wake: 0.45, mood: 'sleepy' };
+  return { line: "*blinks awake slowly* ...oh!! It's YOU. I dreamed about you for " + ago(elapsed) + ". Best dream ever, and now it's real. 💜", wake: 0.25, mood: 'sleepy' };
+}
+function ago(ms) {
+  if (ms < HOUR) return Math.max(1, Math.round(ms / MIN)) + " min";
+  if (ms < DAY) { var h = Math.round(ms / HOUR); return h + (h === 1 ? " hour" : " hours"); }
+  var d = Math.round(ms / DAY); return d + (d === 1 ? " day" : " days");
+}
+function pick(a) { return a[(Math.random() * a.length) | 0]; }
+
+/* =============== state (localStorage, corruption-guarded) =============== */
+var state = null;
+function freshState(name, hue, pers) {
+  return { v: 1, name: name, hue: hue, personality: pers,
+           born: Date.now(), lastVisit: Date.now(), bond: 0, visits: 1 };
+}
+function loadState() {
+  try {
+    var raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    var s = JSON.parse(raw);
+    if (!s || s.v !== 1 || typeof s.name !== 'string' || !s.name ||
+        !isFinite(s.hue) || PERSONALITIES.indexOf(s.personality) < 0 ||
+        !isFinite(s.born) || !isFinite(s.lastVisit) || !isFinite(s.bond)) return null;
+    s.bond = Math.max(0, Math.min(100, s.bond));
+    s.visits = isFinite(s.visits) ? s.visits : 1;
+    return s;
+  } catch (e) { return null; }
+}
+function saveState() {
+  if (!state) return;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+/* =============== DOM refs =============== */
+var $ = function (id) { return document.getElementById(id); };
+var cv = $('cv'), ctx = cv.getContext('2d');
+var bubble = $('bubble');
+var W = 0, H = 0, DPR = 1;
+
+/* =============== time-of-day background tint =============== */
+function tintByHour() {
+  var h = new Date().getHours(), bg;
+  if (h >= 5 && h < 8)       bg = ['#5a4a7e', '#f2a68c'];   // dawn
+  else if (h >= 8 && h < 17) bg = ['#8fb8d8', '#f5dfe8'];   // day
+  else if (h >= 17 && h < 21) bg = ['#5d4a8a', '#e8956d'];  // dusk
+  else                        bg = ['#141433', '#2a2450'];  // night
+  document.body.style.setProperty('--bg1', bg[0]);
+  document.body.style.setProperty('--bg2', bg[1]);
+  return h;
+}
+var hourNow = tintByHour();
+setInterval(function () { hourNow = tintByHour(); }, 60000);
+var isNight = function () { return hourNow >= 21 || hourNow < 5; };
+
+/* =============== WebAudio (synthesized; silent if unsupported) =============== */
+var AC = null;
+function audio() {
+  if (AC === null) {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      AC = Ctx ? new Ctx() : false;
+    } catch (e) { AC = false; }
+  }
+  if (AC && AC.state === 'suspended') { try { AC.resume(); } catch (e) {} }
+  return AC;
+}
+function tone(freq, dur, opts) {
+  var ac = audio(); if (!ac) return;
+  opts = opts || {};
+  try {
+    var t0 = ac.currentTime + (opts.delay || 0);
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = opts.type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (opts.glide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + opts.glide), t0 + dur);
+    var v = opts.vol || 0.12;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(v, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  } catch (e) {}
+}
+function sndCoo()    { tone(540, 0.16, { glide: 190, vol: 0.1 }); tone(680, 0.2, { delay: 0.11, glide: 120, vol: 0.08 }); }
+function sndGiggle() { [740, 920, 800, 1040].forEach(function (f, i) { tone(f, 0.07, { delay: i * 0.085, vol: 0.09, type: 'triangle' }); }); }
+function sndAww()    { tone(620, 0.5, { glide: -230, vol: 0.06 }); }
+function sndChirp()  { tone(880, 0.07, { vol: 0.07 }); tone(1170, 0.1, { delay: 0.07, vol: 0.06 }); }
+function sndPop()    { tone(300, 0.12, { glide: 480, vol: 0.14, type: 'triangle' }); sndGiggle(); }
+
+function buzz(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+
+/* =============== ghost model =============== */
+var ghost = {
+  x: 0, y: 0, wanderT: Math.random() * 9,
+  squash: 0, squashV: 0,          // spring for pet-squash
+  scale: 1, scaleT: 1,            // for peekaboo hide/pop
+  alpha: 1,
+  blink: 0, blinkTimer: 2 + Math.random() * 3,
+  mood: 'happy',                  // happy | excited | sleepy
+  wake: 1,                        // 0 faded/sleepy .. 1 bright
+  petting: false, petHeartT: 0, petCooT: 0,
+  playPhase: null, playT: 0,      // peekaboo state machine
+  idleT: 8
+};
+var pointer = { x: 0, y: 0, has: false };
+var particles = [];               // {x,y,vx,vy,life,max,kind,hue,size}
+var wisps = [];
+var stars = [];
+var bondSession = 0;              // cap bond gain per session
+var BOND_SESSION_CAP = 8;
+
+function addBond(n) {
+  if (!state || bondSession >= BOND_SESSION_CAP) return;
+  var g = Math.min(n, BOND_SESSION_CAP - bondSession);
+  bondSession += g;
+  state.bond = Math.min(100, state.bond + g);
+  updateHud(); saveState();
+}
+function wakeUp(n) { ghost.wake = Math.min(1, ghost.wake + n); if (ghost.wake > 0.7 && ghost.mood === 'sleepy') ghost.mood = 'happy'; }
+
+function bondStage(b) {
+  if (b >= 85) return 'soul-tied ✨';
+  if (b >= 60) return 'best pals';
+  if (b >= 30) return 'buddies';
+  if (b >= 10) return 'warming up';
+  return 'new friend';
+}
+function updateHud() {
+  if (!state) return;
+  $('hudName').textContent = state.name;
+  $('hudStage').textContent = bondStage(state.bond) + ' · ' + Math.round(state.bond) + '♥';
+  $('bondBar').style.width = state.bond + '%';
+}
+
+/* =============== speech bubble =============== */
+var bubbleTimer = null;
+function say(text, ms) {
+  bubble.textContent = text;
+  bubble.style.top = Math.max(70, ghost.y - ghostR() * 2.1 - 54) + 'px';
+  bubble.classList.add('show');
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(function () { bubble.classList.remove('show'); }, ms || 3200);
+}
+
+/* =============== sizing =============== */
+function ghostR() { return Math.max(56, Math.min(120, Math.min(W, H) * 0.16)); }
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);   // DPR-capped
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  seedBackdrop();
+}
+function seedBackdrop() {
+  wisps = []; stars = [];
+  for (var i = 0; i < 22; i++) wisps.push({
+    x: Math.random() * W, y: Math.random() * H,
+    r: 14 + Math.random() * 42, sp: 3 + Math.random() * 9,
+    ph: Math.random() * 7, a: 0.03 + Math.random() * 0.06
+  });
+  for (var j = 0; j < 40; j++) stars.push({
+    x: Math.random() * W, y: Math.random() * H * 0.7,
+    tw: Math.random() * 7, s: 0.6 + Math.random() * 1.4
+  });
+}
+window.addEventListener('resize', resize);
+resize();
+pointer.x = W / 2; pointer.y = H * 0.42;
+
+/* =============== particles =============== */
+function spawn(kind, x, y, n) {
+  for (var i = 0; i < n; i++) particles.push({
+    kind: kind, x: x + (Math.random() - 0.5) * 34, y: y + (Math.random() - 0.5) * 20,
+    vx: (Math.random() - 0.5) * 34,
+    vy: kind === 'z' ? -14 - Math.random() * 8 : -46 - Math.random() * 40,
+    life: 0, max: 1.3 + Math.random() * 0.8,
+    size: kind === 'heart' ? 6 + Math.random() * 6 : 4 + Math.random() * 5,
+    hue: state ? state.hue : 340, ph: Math.random() * 7
+  });
+}
+function drawHeart(x, y, s, hue, a) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 10, s / 10);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'hsl(' + hue + ',85%,72%)';
+  ctx.beginPath();
+  ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-1, 0, -6, -1, -6, -5);
+  ctx.bezierCurveTo(-6, -9, -1, -9, 0, -5.5);
+  ctx.bezierCurveTo(1, -9, 6, -9, 6, -5);
+  ctx.bezierCurveTo(6, -1, 1, 0, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+function drawSpark(x, y, s, a) {
+  ctx.save(); ctx.translate(x, y); ctx.globalAlpha = a;
+  ctx.fillStyle = '#fff8d8';
+  ctx.beginPath();
+  for (var i = 0; i < 4; i++) {
+    var ang = i * Math.PI / 2;
+    ctx.lineTo(Math.cos(ang) * s, Math.sin(ang) * s);
+    ctx.lineTo(Math.cos(ang + Math.PI / 4) * s * 0.35, Math.sin(ang + Math.PI / 4) * s * 0.35);
+  }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+
+/* =============== ghost drawing =============== */
+function drawGhost(t) {
+  var R = ghostR();
+  var bob = Math.sin(t * 1.4) * R * 0.08;
+  var wanderX = Math.sin(ghost.wanderT * 0.45) * W * 0.06;
+  ghost.x = W / 2 + wanderX;
+  ghost.y = H * 0.42 + bob;
+
+  // peekaboo overrides
+  var sc = ghost.scale;
+  var x = ghost.x, y = ghost.y;
+  if (ghost.playPhase === 'hiding') y += R * (1 - sc) * 1.6;
+  if (ghost.playPhase === 'pop') x = ghost.popX;
+
+  var sq = ghost.squash;
+  var sx = sc * (1 + sq * 0.35), sy = sc * (1 - sq * 0.3);
+  var bright = 0.55 + 0.45 * ghost.wake;
+  var hue = state ? state.hue : 340;
+  var bond = state ? state.bond : 0;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = ghost.alpha * bright;
+
+  // glow — scales with bond
+  var glowR = R * (1.5 + 1.1 * (bond / 100)) * sc;
+  var gg = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, glowR);
+  gg.addColorStop(0, 'hsla(' + hue + ',90%,80%,' + (0.28 + 0.3 * (bond / 100)) * ghost.wake + ')');
+  gg.addColorStop(1, 'hsla(' + hue + ',90%,80%,0)');
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2); ctx.fill();
+
+  ctx.scale(sx, sy);
+
+  // body: dome + wavy hem
+  var hem = R * 0.92, waves = 5, wl = (2 * R) / waves;
+  var wob = Math.sin(t * 3.1) * R * 0.045;
+  ctx.beginPath();
+  ctx.moveTo(-R, hem);
+  ctx.lineTo(-R, 0);
+  ctx.arc(0, 0, R, Math.PI, 0);
+  ctx.lineTo(R, hem);
+  for (var i = 0; i < waves; i++) {
+    var midX = R - (i + 0.5) * wl, endX = R - (i + 1) * wl;
+    ctx.quadraticCurveTo(midX, hem + (i % 2 === 0 ? R * 0.16 + wob : -R * 0.1 - wob), endX, hem);
+  }
+  ctx.closePath();
+  var bodyG = ctx.createLinearGradient(0, -R, 0, hem);
+  bodyG.addColorStop(0, '#ffffff');
+  bodyG.addColorStop(1, 'hsl(' + hue + ',55%,' + (86 + 6 * ghost.wake) + '%)');
+  ctx.fillStyle = bodyG;
+  ctx.shadowColor = 'hsla(' + hue + ',80%,75%,' + 0.5 * ghost.wake + ')';
+  ctx.shadowBlur = 22;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // face
+  var ex = R * 0.34, ey = -R * 0.08, er = R * 0.13;
+  // pupils track the finger
+  var dx = pointer.x - x, dy = pointer.y - y;
+  var d = Math.hypot(dx, dy) || 1;
+  var px = (dx / d) * er * 0.38, py = (dy / d) * er * 0.38;
+
+  var lid = ghost.blink > 0 ? Math.max(0.08, 1 - ghost.blink * 2) : 1;   // blink squish
+  if (ghost.mood === 'sleepy') lid = Math.min(lid, 0.35 + 0.45 * ghost.wake);
+
+  if (ghost.petting || ghost.playPhase === 'pop') {
+    // happy closed arc-eyes  ^ ^
+    ctx.strokeStyle = '#43395e'; ctx.lineWidth = R * 0.055; ctx.lineCap = 'round';
+    [-1, 1].forEach(function (s) {
+      ctx.beginPath();
+      ctx.arc(s * ex, ey + er * 0.2, er * 0.85, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    });
+  } else {
+    ctx.fillStyle = '#43395e';
+    [-1, 1].forEach(function (s) {
+      ctx.beginPath();
+      ctx.ellipse(s * ex + px, ey + py, er, er * lid, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    if (lid > 0.4) {   // glints
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      [-1, 1].forEach(function (s) {
+        ctx.beginPath();
+        ctx.arc(s * ex + px - er * 0.3, ey + py - er * 0.35 * lid, er * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+
+  // blush
+  ctx.fillStyle = 'hsla(' + hue + ',80%,72%,' + (0.35 + 0.25 * ghost.wake) + ')';
+  [-1, 1].forEach(function (s) {
+    ctx.beginPath();
+    ctx.ellipse(s * ex * 1.35, ey + er * 2.1, er * 0.72, er * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // mouth by mood
+  ctx.strokeStyle = '#43395e'; ctx.fillStyle = '#43395e';
+  ctx.lineWidth = R * 0.05; ctx.lineCap = 'round';
+  var my = ey + er * 1.9;
+  if (ghost.petting || ghost.mood === 'excited' || ghost.playPhase === 'pop') {
+    ctx.beginPath(); ctx.ellipse(0, my, R * 0.13, R * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'hsla(' + hue + ',75%,70%,.8)';
+    ctx.beginPath(); ctx.ellipse(0, my + R * 0.05, R * 0.08, R * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (ghost.mood === 'sleepy') {
+    ctx.beginPath(); ctx.arc(0, my, R * 0.05, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(0, my - R * 0.06, R * 0.14, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+  }
+
+  // bond accessories: bow at 60+, sparkle crown at 85+
+  if (bond >= 60) {
+    var bx = R * 0.55, by = -R * 0.78;
+    ctx.fillStyle = 'hsl(' + hue + ',75%,68%)';
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    ctx.lineTo(bx - R * 0.2, by - R * 0.12); ctx.lineTo(bx - R * 0.2, by + R * 0.12); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    ctx.lineTo(bx + R * 0.2, by - R * 0.12); ctx.lineTo(bx + R * 0.2, by + R * 0.12); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, R * 0.06, 0, Math.PI * 2); ctx.fill();
+  }
+  if (bond >= 85) {
+    for (var k = -1; k <= 1; k++) {
+      var sxr = k * R * 0.34, syr = -R * 1.18 + Math.sin(t * 2.2 + k * 2) * R * 0.06;
+      drawSpark(sxr, syr, R * 0.08 * (k === 0 ? 1.4 : 1), 0.85 * ghost.wake);
+    }
+  }
+  ctx.restore();
+}
+
+/* =============== main loop (dt-based, paused when hidden) =============== */
+var lastT = 0, running = true, elapsedTotal = 0;
+function frame(ts) {
+  if (!running) return;
+  var dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
+  lastT = ts;
+  elapsedTotal += dt;
+  var t = elapsedTotal;
+
+  ghost.wanderT += dt;
+
+  // squash spring
+  var target = ghost.petting ? 0.22 : 0;
+  ghost.squashV += (target - ghost.squash) * 18 * dt;
+  ghost.squashV *= Math.pow(0.0015, dt);
+  ghost.squash += ghost.squashV * dt * 10;
+
+  // scale toward target (peekaboo)
+  ghost.scale += (ghost.scaleT - ghost.scale) * Math.min(1, 9 * dt);
+
+  // blink
+  if (ghost.blink > 0) ghost.blink = Math.max(0, ghost.blink - dt * 8);
+  else { ghost.blinkTimer -= dt; if (ghost.blinkTimer <= 0) { ghost.blink = 0.5; ghost.blinkTimer = 2.5 + Math.random() * 4; } }
+
+  // waking drifts up slowly while you're present
+  ghost.wake = Math.min(1, ghost.wake + dt * 0.004);
+
+  // petting juice
+  if (ghost.petting) {
+    ghost.petHeartT -= dt;
+    if (ghost.petHeartT <= 0) { spawn('heart', ghost.x, ghost.y - ghostR(), 1); ghost.petHeartT = 0.15; }
+    ghost.petCooT -= dt;
+    if (ghost.petCooT <= 0) { sndCoo(); buzz(12); ghost.petCooT = 0.65 + Math.random() * 0.3; addBond(0.2); wakeUp(0.08); }
+  }
+
+  // sleepy z's
+  if (ghost.mood === 'sleepy' && Math.random() < dt * 0.5) spawn('z', ghost.x + ghostR() * 0.7, ghost.y - ghostR() * 0.7, 1);
+
+  // peekaboo state machine
+  if (ghost.playPhase) {
+    ghost.playT -= dt;
+    if (ghost.playPhase === 'hiding' && ghost.playT <= 0) {
+      ghost.playPhase = 'pop';
+      ghost.popX = W * (0.25 + Math.random() * 0.5);
+      ghost.scale = 0.15; ghost.scaleT = 1;
+      ghost.playT = 1.4;
+      say("BOO!! 👻 hehehe", 1800);
+      sndPop(); buzz([25, 40, 25]);
+      spawn('spark', ghost.popX, H * 0.4, 14);
+      addBond(1); wakeUp(0.25);
+    } else if (ghost.playPhase === 'pop' && ghost.playT <= 0) {
+      ghost.playPhase = null; ghost.alpha = 1;
+    }
+  }
+
+  // rare idle murmurs when untouched
+  ghost.idleT -= dt;
+  if (ghost.idleT <= 0) {
+    ghost.idleT = 30 + Math.random() * 30;
+    if (!ghost.petting && !ghost.playPhase && !bubble.classList.contains('show')) {
+      if (ghost.mood === 'sleepy') { sndAww(); say(pick(["*soft ghost snore*", "mmh... five more minutes...", "*dreaming of you*"]), 2600); }
+      else if (Math.random() < 0.6) say(pick(["boop?", "*floats contentedly*", "hi 👋", "~"]), 2000);
+    }
+  }
+
+  /* ---- draw ---- */
+  ctx.clearRect(0, 0, W, H);
+
+  if (isNight()) {
+    for (var si = 0; si < stars.length; si++) {
+      var st = stars[si];
+      var twk = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.8 + st.tw));
+      ctx.globalAlpha = 0.5 * twk;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(st.x, st.y, st.s, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  for (var wi = 0; wi < wisps.length; wi++) {
+    var wsp = wisps[wi];
+    wsp.y -= wsp.sp * dt; wsp.x += Math.sin(t * 0.3 + wsp.ph) * 6 * dt;
+    if (wsp.y < -wsp.r) { wsp.y = H + wsp.r; wsp.x = Math.random() * W; }
+    var wg = ctx.createRadialGradient(wsp.x, wsp.y, 0, wsp.x, wsp.y, wsp.r);
+    wg.addColorStop(0, 'rgba(255,255,255,' + wsp.a + ')');
+    wg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = wg;
+    ctx.beginPath(); ctx.arc(wsp.x, wsp.y, wsp.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawGhost(t);
+
+  for (var pi = particles.length - 1; pi >= 0; pi--) {
+    var p = particles[pi];
+    p.life += dt;
+    if (p.life >= p.max) { particles.splice(pi, 1); continue; }
+    p.x += (p.vx + Math.sin(t * 4 + p.ph) * 16) * dt;
+    p.y += p.vy * dt;
+    var a = 1 - p.life / p.max;
+    if (p.kind === 'heart') drawHeart(p.x, p.y, p.size * (0.7 + 0.5 * a), p.hue, a);
+    else if (p.kind === 'spark') drawSpark(p.x, p.y, p.size, a);
+    else { // z
+      ctx.save(); ctx.globalAlpha = a * 0.8; ctx.fillStyle = '#cfc6ee';
+      ctx.font = '600 ' + Math.round(10 + p.size) + 'px sans-serif';
+      ctx.fillText('z', p.x, p.y); ctx.restore();
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    running = false;
+    if (state) { state.lastVisit = Date.now(); saveState(); }
+  } else {
+    running = true; lastT = performance.now();
+    hourNow = tintByHour();
+    requestAnimationFrame(frame);
+  }
+});
+window.addEventListener('pagehide', function () {
+  if (state) { state.lastVisit = Date.now(); saveState(); }
+});
+// keep lastVisit roughly fresh even if the WebView is killed without events
+setInterval(function () { if (state && !document.hidden) { state.lastVisit = Date.now(); saveState(); } }, 30000);
+
+/* =============== input: petting + eye-tracking =============== */
+function ptFromEvent(e) { return { x: e.clientX, y: e.clientY }; }
+function onGhost(pt) {
+  var R = ghostR();
+  return Math.hypot(pt.x - ghost.x, pt.y - ghost.y) < R * 1.35;
+}
+cv.addEventListener('pointerdown', function (e) {
+  e.preventDefault(); audio();
+  var pt = ptFromEvent(e);
+  pointer.x = pt.x; pointer.y = pt.y; pointer.has = true;
+  if (onGhost(pt) && !ghost.playPhase) {
+    ghost.petting = true;
+    ghost.petHeartT = 0; ghost.petCooT = 0;
+    if (Math.random() < 0.5) say(pick(PET_LINES), 1400);
+    wakeUp(0.15);
+  }
+});
+window.addEventListener('pointermove', function (e) {
+  pointer.x = e.clientX; pointer.y = e.clientY; pointer.has = true;
+});
+window.addEventListener('pointerup', function () { ghost.petting = false; });
+window.addEventListener('pointercancel', function () { ghost.petting = false; });
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+/* =============== buttons =============== */
+$('btnPlay').addEventListener('click', function () {
+  audio();
+  if (ghost.playPhase) return;
+  ghost.playPhase = 'hiding';
+  ghost.playT = 0.9 + Math.random() * 0.7;
+  ghost.scaleT = 0.12;
+  say("...", 900);
+  sndChirp();
+  wakeUp(0.15);
+});
+$('btnTalk').addEventListener('click', function () {
+  audio();
+  if (!state) return;
+  say(pick(TALK_LINES[state.personality]), 3800);
+  sndChirp(); buzz(8);
+  addBond(0.5); wakeUp(0.1);
+});
+
+/* =============== first-run naming =============== */
+var selHue = GIFT_HUES[(Math.random() * GIFT_HUES.length) | 0];
+var selPers = PERSONALITIES[(Math.random() * PERSONALITIES.length) | 0];
+function buildNamePicker() {
+  $('nameInput').value = pick(GHOST_NAMES);
+  var sws = $('swatches'); sws.innerHTML = '';
+  GIFT_HUES.forEach(function (h) {
+    var d = document.createElement('div');
+    d.className = 'sw' + (h === selHue ? ' sel' : '');
+    d.style.background = 'hsl(' + h + ',80%,74%)';
+    d.addEventListener('click', function () {
+      selHue = h;
+      sws.querySelectorAll('.sw').forEach(function (x) { x.classList.remove('sel'); });
+      d.classList.add('sel');
+    });
+    sws.appendChild(d);
+  });
+  var chips = $('persChips'); chips.innerHTML = '';
+  PERSONALITIES.forEach(function (p) {
+    var c = document.createElement('div');
+    c.className = 'chip' + (p === selPers ? ' sel' : '');
+    c.textContent = p;
+    c.addEventListener('click', function () {
+      selPers = p;
+      chips.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('sel'); });
+      c.classList.add('sel');
+    });
+    chips.appendChild(c);
+  });
+}
+$('btnAdopt').addEventListener('click', function () {
+  audio();
+  var name = $('nameInput').value.trim().slice(0, 16) || 'Boo';
+  state = freshState(name, selHue, selPers);
+  saveState(); updateHud();
+  $('ovName').classList.remove('show');
+  ghost.wake = 1; ghost.mood = 'excited';
+  setTimeout(function () {
+    say("Boo! I'm " + name + ". I live in your phone now. 💜 (pet me!)", 4200);
+    sndGiggle(); buzz([20, 30, 20]);
+    spawn('heart', ghost.x, ghost.y - ghostR(), 6);
+  }, 350);
+});
+
+/* =============== send-a-ghost =============== */
+var giftDraft = null;
+function rollGift() {
+  giftDraft = {
+    name: pick(GHOST_NAMES.filter(function (n) { return !state || n !== state.name; })),
+    hue: GIFT_HUES[(Math.random() * GIFT_HUES.length) | 0],
+    personality: PERSONALITIES[(Math.random() * PERSONALITIES.length) | 0]
+  };
+  $('giftPrevSw').style.background = 'hsl(' + giftDraft.hue + ',80%,74%)';
+  $('giftPrevSw').style.setProperty('--pGlow', 'hsla(' + giftDraft.hue + ',80%,74%,.6)');
+  $('giftPrevName').textContent = giftDraft.name;
+  $('giftPrevPers').textContent = 'a ' + giftDraft.personality + ' little ghost';
+  $('giftLink').textContent = giftURL();
+}
+function giftURL() {
+  return location.origin + location.pathname + '#g=' + booEncodeGift(giftDraft);
+}
+$('btnGift').addEventListener('click', function () {
+  audio(); rollGift();
+  $('btnShare').style.display = navigator.share ? '' : 'none';
+  $('ovGift').classList.add('show');
+  sndChirp();
+});
+$('btnReroll').addEventListener('click', function () { rollGift(); sndChirp(); });
+$('btnGiftClose').addEventListener('click', function () { $('ovGift').classList.remove('show'); });
+$('btnCopy').addEventListener('click', function () {
+  var url = giftURL(), btn = $('btnCopy');
+  var done = function () { btn.textContent = 'Copied! 💌'; setTimeout(function () { btn.textContent = 'Copy link'; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done, function () { legacyCopy(url); done(); });
+  } else { legacyCopy(url); done(); }
+  addBond(0.5);
+});
+function legacyCopy(text) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  } catch (e) {}
+}
+$('btnShare').addEventListener('click', function () {
+  if (navigator.share) {
+    navigator.share({ title: 'A ghost for you 👻', text: giftDraft.name + ' the ' + giftDraft.personality + ' ghost wants to live in your phone!', url: giftURL() }).catch(function () {});
+  }
+});
+
+/* =============== incoming gift (adopt-a-friend) =============== */
+function checkIncomingGift() {
+  var m = /[#&]g=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+  var gift = m ? booDecodeGift(m[1]) : null;
+  if (location.hash) {
+    // clear the fragment so a reload doesn't re-trigger the adoption
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  if (!gift) return false;
+  $('adoptText').textContent = gift.name + ' the ' + gift.personality +
+    ' ghost floated all the way here just for you. Fresh out of the mist, looking for a home.';
+  $('btnAdoptGift').textContent = 'Adopt ' + gift.name + ' 💕';
+  var decline = $('btnDeclineGift');
+  if (state) {
+    decline.textContent = 'Stay with ' + state.name;
+    decline.style.display = '';
+  } else {
+    decline.style.display = 'none';
+  }
+  $('btnAdoptGift').onclick = function () {
+    audio();
+    state = freshState(gift.name, gift.hue, gift.personality);
+    saveState(); updateHud();
+    $('ovAdopt').classList.remove('show');
+    ghost.wake = 1; ghost.mood = 'excited';
+    setTimeout(function () {
+      say("Hi!! I'm " + gift.name + ". A friend sent me to keep you company. 💜", 4600);
+      sndGiggle(); buzz([20, 30, 20]);
+      spawn('heart', ghost.x, ghost.y - ghostR(), 8);
+      spawn('spark', ghost.x, ghost.y, 8);
+    }, 350);
+  };
+  decline.onclick = function () {
+    $('ovAdopt').classList.remove('show');
+    say(gift.name + " waves goodbye and drifts off to haunt happily elsewhere. 👋", 3600);
+    arrive(true);
+  };
+  $('ovAdopt').classList.add('show');
+  return true;
+}
+
+/* =============== check-on-open (the heart of it) =============== */
+function arrive(skipGreeting) {
+  if (!state) return;
+  var now = Date.now();
+  var elapsed = Math.max(0, now - state.lastVisit);
+  var g = greetingFor(elapsed, state.name);
+  ghost.wake = g.wake;
+  ghost.mood = g.mood;
+  if (elapsed > HOUR) { state.visits++; addBondVisit(); }
+  state.lastVisit = now;
+  saveState(); updateHud();
+  if (!skipGreeting) {
+    setTimeout(function () {
+      say(g.line, elapsed < 10 * MIN ? 2200 : 5200);
+      if (g.mood === 'sleepy') sndAww();
+    }, 700);
+  }
+}
+function addBondVisit() {
+  // visits always help the bond — coming back is ALWAYS good news
+  state.bond = Math.min(100, state.bond + 3);
+}
+
+/* =============== boot sequence =============== */
+state = loadState();
+var gotGift = checkIncomingGift();
+if (!gotGift) {
+  if (!state) {
+    buildNamePicker();
+    $('ovName').classList.add('show');
+    ghost.wake = 1;
+  } else {
+    updateHud();
+    arrive(false);
+  }
+} else if (state) {
+  updateHud(); // greeting deferred until they choose adopt/decline
+}
+updateHud();
+requestAnimationFrame(function (ts) { lastT = ts; requestAnimationFrame(frame); });
+
+} /* end boot() */
+</script>
+</body>
+</html>
